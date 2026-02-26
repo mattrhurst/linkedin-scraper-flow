@@ -1,0 +1,1483 @@
+{
+  "name": "2026-01-06-LinkedIn Scraper 2.0",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Low Score Jobs\nJobs scoring below 75 still get added to Google Sheet, but no email alert is sent.",
+        "height": 180,
+        "width": 344,
+        "color": 5
+      },
+      "id": "ee0f015f-ed90-4393-b388-e0b9c3ce45ab",
+      "name": "Low Score Note1",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -3664,
+        1248
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "Improvements to make\n- Resume Generator flow is working nicely now\n- maybe tweak the account slightly to \n\n---\nhttps://console.apify.com/actors/gdbRh93zn42kBYDyS/runs <- cancelled this actor but this was the key one. \n\n12/30 - Had to add in data table for Jobs lookup as it was causing API call limits. Basically now it just reads the table and duplicates over there so we don't run into too many issues.\n\n---\n## To Do\u2019s\n- [x] Replace resume with a more robust version\n- [x] Update summaries to 300-350 words\n\n## Phase 2\n- [x] Tweak ranking further",
+        "height": 672,
+        "width": 880
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -6560,
+        -400
+      ],
+      "typeVersion": 1,
+      "id": "6cf911ed-2692-4dcc-854f-1adf0754c9b0",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "operation": "Run actor and get dataset",
+        "actorId": {
+          "__rl": true,
+          "value": "gdbRh93zn42kBYDyS",
+          "mode": "list",
+          "cachedResultName": "Advanced Linkedin Job Scraper (curious_coder/linkedin-jobs-search-scraper)",
+          "cachedResultUrl": "https://console.apify.com/actors/gdbRh93zn42kBYDyS/input"
+        },
+        "customBody": "={\n    \"cookies\": [\n        {\n            \"name\": \"li_at\",\n            \"value\": \"[YOUR_LINKEDIN_COOKIE]\",\n            \"domain\": \".linkedin.com\"\n        }\n    ],\n    \"count\": 2000,\n    \"proxy\": {\n        \"useApifyProxy\": true,\n        \"apifyProxyGroups\": [\n            \"RESIDENTIAL\"\n        ],\n        \"apifyProxyCountry\": \"US\"\n    },\n    \"scrapeCompany\": true,\n    \"scrapeJobDetails\": false,\n    \"scrapeSkills\": false,\n    \"searchUrl\": \"{{ $node[\"Loop Over URLs\"].json[\"URL\"] || $json['LinkedIn Search URL'] }}\",\n    \"userAgent\": \"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36\"\n}"
+      },
+      "id": "70dae07c-990f-4b88-8d08-f09c2d314b92",
+      "name": "Get LinkedIn Jobs",
+      "type": "@apify/n8n-nodes-apify.apify",
+      "position": [
+        -6656,
+        464
+      ],
+      "typeVersion": 1,
+      "executeOnce": false,
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "waitBetweenTries": 3000,
+      "maxTries": 2,
+      "credentials": {
+        "apifyApi": {
+          "id": "[YOUR_CREDENTIAL_ID]",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get search info from loop item\nconst loopItem = $(\"Loop Over URLs\").first().json;\nconst searchUrl = loopItem.URL || \"\";\nconst searchLabel = loopItem.Label || \"\";\n\n// Safely get jobs from either source\nlet newJobs = [];\n\n// Try to get jobs from APIFY path\ntry {\n  const apifyJobs = $('Get LinkedIn Jobs').all();\n  newJobs = newJobs.concat(apifyJobs);\n} catch (e) {\n  console.log('APIFY path not executed');\n}\n\n// Try to get jobs from Manual Entry path\ntry {\n  const manualJobs = $('Transform Manual Entry').all();\n  newJobs = newJobs.concat(manualJobs);\n} catch (e) {\n  console.log('Manual Entry path not executed');\n}\n\n// Get existing job IDs from Supabase (only the ones that matched our incoming batch)\nconst existingJobIds = $('Get Existing Job IDs').all().map(item => String(item.json.linkedin_job_id));\n\nconsole.log('New jobs count:', newJobs.length);\nconsole.log('Existing job IDs count:', existingJobIds.length);\n\n// Filter out jobs that already exist (convert to string for comparison)\nconst uniqueJobs = newJobs.filter(item => {\n  return !existingJobIds.includes(String(item.json.id));\n});\n\nconsole.log('Unique jobs count:', uniqueJobs.length);\n\n// Attach search info to each job so it flows through both If branches\nreturn uniqueJobs.length > 0\n  ? uniqueJobs.map(item => ({\n      json: { ...item.json, searchUrl, searchLabel, totalJobsProcessed: newJobs.length }\n    }))\n  : [{ json: { searchUrl, searchLabel, totalJobsProcessed: newJobs.length, _empty: true } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5984,
+        656
+      ],
+      "id": "72ed8637-0743-4e59-a56e-fccb9a4a54e0",
+      "name": "Filter Duplicates",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "=cronExpression",
+              "expression": "0 6 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "c765186c-2fb5-48d3-a7ea-410a6ef83f0d",
+      "name": "Schedule Trigger - Daily 6 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -8672,
+        448
+      ],
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "[YOUR_SHEET_ID]",
+          "mode": "list",
+          "cachedResultName": "Automated Job Hunt",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/[YOUR_SHEET_ID]/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1786454755,
+          "mode": "list",
+          "cachedResultName": "JobURLs",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/[YOUR_SHEET_ID]/edit#gid=1786454755"
+        },
+        "options": {}
+      },
+      "id": "82b65738-5793-474a-bfa2-660e43078944",
+      "name": "Read Job URLs from Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        -8448,
+        448
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "[YOUR_CREDENTIAL_ID]",
+          "name": "Google Sheets account1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "active-filter",
+              "leftValue": "={{ $json.Active }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "32519cdd-843c-4441-8fd4-59756dc4489d",
+      "name": "Filter Active URLs",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        -8224,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "[YOUR_RESUME_FILE_ID]",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "id": "422817de-29ce-4177-9d2b-57917468be4e",
+      "name": "Schedule Download Resume",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -7104,
+        464
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "[YOUR_CREDENTIAL_ID]",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "destinationKey": "text",
+        "options": {}
+      },
+      "id": "4a091f86-36ba-4c2e-bdf9-2d55f9564baf",
+      "name": "Schedule Extract Resume",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        -6880,
+        464
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "3b233f88-e537-459e-9314-39f6630be814",
+      "name": "Loop Over URLs",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -8000,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "[YOUR_SHEET_ID]",
+          "mode": "list",
+          "cachedResultName": "Automated Job Hunt",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/[YOUR_SHEET_ID]/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Jobs",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/[YOUR_SHEET_ID]/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "Date Posted": "={{ $json.postedAt ? $json.postedAt.toDateTime().format('dd MMM yyyy') : '' }}",
+            "Job Title": "={{ $json.title }}",
+            "Company": "={{ $json.companyName }}",
+            "Job URL": "={{ $json.link }}",
+            "Is It In-Person, Remote or Hybrd": "={{ $json.workplaceTypes[0] }}",
+            "Location": "={{ $json.formattedLocation }}",
+            "Description Text": "={{ $json.descriptionText }}",
+            "Maximum Salary": "={{ $json.salaryInsights.compensationBreakdown[0].maxSalary }}",
+            "Minimum Salary": "={{ $json.salaryInsights.compensationBreakdown[0].minSalary }}",
+            "Apply URL": "={{ $json.applyUrl }}",
+            "Company Description": "={{ $json.companyDescription }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Date Posted",
+              "displayName": "Date Posted",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Job Title",
+              "displayName": "Job Title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Company",
+              "displayName": "Company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Job URL",
+              "displayName": "Job URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Is It In-Person, Remote or Hybrd",
+              "displayName": "Is It In-Person, Remote or Hybrd",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Location",
+              "displayName": "Location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Minimum Salary",
+              "displayName": "Minimum Salary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Maximum Salary",
+              "displayName": "Maximum Salary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Description Text",
+              "displayName": "Description Text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Apply URL",
+              "displayName": "Apply URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Company Description",
+              "displayName": "Company Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 2",
+              "displayName": "Column 2",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 3",
+              "displayName": "Column 3",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 4",
+              "displayName": "Column 4",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 5",
+              "displayName": "Column 5",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 6",
+              "displayName": "Column 6",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 7",
+              "displayName": "Column 7",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 8",
+              "displayName": "Column 8",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 9",
+              "displayName": "Column 9",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 10",
+              "displayName": "Column 10",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 11",
+              "displayName": "Column 11",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 12",
+              "displayName": "Column 12",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 13",
+              "displayName": "Column 13",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 14",
+              "displayName": "Column 14",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Column 15",
+              "displayName": "Column 15",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "useAppend": true
+        }
+      },
+      "id": "d0e4101d-3085-4c17-92f2-6e955e5b0b84",
+      "name": "Add jobs to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        -5536,
+        560
+      ],
+      "typeVersion": 4.7,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "[YOUR_CREDENTIAL_ID]",
+          "name": "Google Sheets account1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const job = $input.item.json;\n\n// Batch size = 1, so always read the single loop item (URL + Label) from item 0\nlet searchUrl = \"\";\nlet searchLabel = \"\";\ntry {\n  const loopItem = $(\"Loop Over URLs\").first().json;\n  searchUrl = loopItem.URL || \"\";\n  searchLabel = loopItem.Label || \"\";\n} catch (e) {\n  searchUrl = \"\";\n  searchLabel = \"\";\n}\n\n// Easy apply badge\nconst easyApplyBadge = job.easyApply\n  ? '<span style=\"background: #0a66c2; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-left: 8px;\">\u26a1 Easy Apply</span>'\n  : \"\";\n\n// LinkedIn search link block (uses Label as anchor text)\nconst searchLinkBlock = searchUrl\n  ? `\n  <p style=\"margin: 0 0 12px 0; font-size: 13px;\">\n    \ud83d\udd0e <a href=\"${searchUrl}\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"color:#0a66c2; text-decoration: underline;\">\n      ${searchLabel || \"LinkedIn search\"}\n    </a>\n  </p>`\n  : \"\";\n\n// Email HTML\nconst html = `\n<div style=\"font-family: Arial, sans-serif;\">\n  ${searchLinkBlock}\n\n  <div style=\"border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 8px;\">\n    <h3 style=\"margin: 0 0 10px 0;\">\u2b50 Score: ${job.matchScore}/100 ${easyApplyBadge}</h3>\n    <h4 style=\"margin: 0 0 5px 0;\"><a href=\"${job.jobUrl}\">${job.jobTitle} - ${job.company}</a></h4>\n    <p style=\"margin: 5px 0;\"><strong>Location:</strong> ${job.location} | <strong>Type:</strong> ${job.workType}</p>\n    <p style=\"margin: 5px 0;\"><strong>\ud83d\udcb0 Salary:</strong> ${job.salaryFormatted}</p>\n    <p style=\"margin: 5px 0; font-size: 12px; color: #666;\"><strong>Score Breakdown:</strong> ${job.scoreBreakdown}</p>\n    ${job.companyDescription ? `<p style=\"margin: 5px 0;\"><strong>\ud83c\udfe2 About Company:</strong> ${job.companyDescription}</p>` : \"\"}\n    <p style=\"margin: 10px 0;\"><strong>Why you're a good fit:</strong> ${job.quickSummary}</p>\n    <p style=\"margin: 5px 0;\"><strong>\u2705 Strengths:</strong> ${job.keyStrengths}</p>\n    <p style=\"margin: 5px 0;\"><strong>\u26a0\ufe0f Gaps:</strong> ${job.keyGaps}</p>\n    <a href=\"[YOUR_N8N_URL]/webhook/[YOUR_WEBHOOK_ID]?jobId=${job.jobId}\"\n       style=\"display: inline-block; background: #28a745; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; font-size: 13px; margin-top: 10px;\">\n       \ud83d\udcdd Generate Prep\n    </a>\n    <a href=\"[YOUR_N8N_URL]/webhook/save-job-to-tracker?jobId=${job.jobId}\"\n       style=\"display: inline-block; background: #007bff; color: white; padding: 8px 16px; border-radius: 4px; text-decoration: none; font-size: 13px; margin-top: 10px; margin-left: 8px;\">\n       \ud83d\udcbe Save Job\n    </a>\n  </div>\n</div>\n`;\n\nreturn {\n  json: {\n    html,\n    matchScore: job.matchScore,\n    jobTitle: job.jobTitle,\n    company: job.company,\n    linkedInSearchUrl: searchUrl,\n    linkedInSearchLabel: searchLabel,\n  },\n};"
+      },
+      "id": "c1be9187-3c53-4107-bfbc-ef64041590ea",
+      "name": "Format Email HTML",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -3200,
+        464
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "sortFieldsUi": {
+          "sortField": [
+            {
+              "fieldName": "matchScore",
+              "order": "descending"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0cb570e2-8f2a-40da-a788-b7798726ebd9",
+      "name": "Sort by Score",
+      "type": "n8n-nodes-base.sort",
+      "position": [
+        -2976,
+        464
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "61858188-742f-493d-b898-a9118a29f71f",
+      "name": "Combine High-Score Jobs",
+      "type": "n8n-nodes-base.aggregate",
+      "position": [
+        -2752,
+        464
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "sendTo": "[YOUR_EMAIL]",
+        "subject": "=\ud83c\udfaf High-Match Jobs for {{ new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) }} (Score 75+)",
+        "message": "=<h2>\ud83c\udfaf High-Match Job Alerts for {{ new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) }}</h2>\n<p>Found <strong>{{ $json.data.length }}</strong> NEW jobs scoring 70 or higher based on your resume.</p>\n<p style=\"font-size: 12px; color: #666;\">Sorted by match score (highest first)</p>\n<hr/>\n{{ $json.data.map(item => item.html).join('') }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "3ebf5f1d-5a3d-4433-963c-d3841b16fdcb",
+      "name": "Send High-Score Alert",
+      "type": "n8n-nodes-base.gmail",
+      "position": [
+        -2528,
+        1136
+      ],
+      "webhookId": "[YOUR_WEBHOOK_ID]",
+      "typeVersion": 2.1,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "[YOUR_CREDENTIAL_ID]",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ { delayMinutes: Math.floor(Math.random() * 40) + 10 } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -7552,
+        464
+      ],
+      "id": "2027c962-11b6-4cd0-ae29-51b4af3d4375",
+      "name": "Set Delay"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.delayMinutes }}",
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -7328,
+        464
+      ],
+      "id": "2a569cbe-9dec-4a77-bc5a-67992813cf58",
+      "name": "Wait",
+      "webhookId": "[YOUR_WEBHOOK_ID]"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "[YOUR_SHEET_ID]",
+          "mode": "list",
+          "cachedResultName": "Automated Job Hunt",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/[YOUR_SHEET_ID]/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1786454755,
+          "mode": "list",
+          "cachedResultName": "JobURLs",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/[YOUR_SHEET_ID]/edit#gid=1786454755"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": 0,
+            "URL": "={{ $('Read Job URLs from Sheet').item.json.URL }}",
+            "Label": "={{ $('Read Job URLs from Sheet').item.json.Label }}",
+            "Active": "={{ $('Read Job URLs from Sheet').item.json.Active }}",
+            "Last Run": "={{ $now.setZone('America/Los_Angeles').toFormat('yyyy-MM-dd HH:mm:ss') }} "
+          },
+          "matchingColumns": [
+            "URL"
+          ],
+          "schema": [
+            {
+              "id": "URL",
+              "displayName": "URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Label",
+              "displayName": "Label",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Active",
+              "displayName": "Active",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last Run",
+              "displayName": "Last Run",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "URL_LastSeenHash",
+              "displayName": "URL_LastSeenHash",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Labeled At",
+              "displayName": "Labeled At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Misc Notes",
+              "displayName": "Misc Notes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -6432,
+        464
+      ],
+      "id": "95f68dc7-61ba-45a4-b1d8-af8c55d51ced",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "[YOUR_CREDENTIAL_ID]",
+          "name": "Google Sheets account1"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "job-id",
+        "limit": 1000,
+        "filterType": "string",
+        "filterString": "=linkedin_job_id=in.({{ $json.ids.join(',') }})"
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -6208,
+        656
+      ],
+      "id": "6a5bad3e-69f4-4813-9a9f-9d1cf09c1e50",
+      "name": "Get Existing Job IDs",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "[YOUR_CREDENTIAL_ID]",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "job-id",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "linkedin_job_id",
+              "fieldValue": "={{ $json.id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -5536,
+        368
+      ],
+      "id": "d1883e61-9a0e-4248-91ab-36bbe49fddde",
+      "name": "Insert row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "[YOUR_CREDENTIAL_ID]",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all incoming job IDs as a comma-separated string\nconst incomingIds = $input.all().map(item => item.json.id);\nreturn [{ json: { ids: incomingIds } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6432,
+        656
+      ],
+      "id": "f22fd9c8-ae43-4392-85c8-bc1f3ce6b856",
+      "name": "Extract Incoming IDs"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "92f4327d-9a92-48b0-9d03-0e55e980bfa7",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -5760,
+        656
+      ],
+      "id": "c33baa90-4c00-493b-a496-a93b32975745",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allJobs = $input.all().map(item => item.json);\n\nconst highScoreJobs = allJobs.filter(job => job.matchScore >= 75);\nconst lowScoreJobs = allJobs.filter(job => job.matchScore < 70);\n\nreturn [{\n  json: {\n    hasHighScores: highScoreJobs.length > 0,\n    highScoreCount: highScoreJobs.length,\n    lowScoreCount: lowScoreJobs.length,\n    totalJobs: allJobs.length,\n    highScoreJobs: highScoreJobs,\n    lowScoreJobs: lowScoreJobs\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4400,
+        544
+      ],
+      "id": "aa70b49a-cde7-4d19-914a-b36e443a81cc",
+      "name": "Aggregate & Check Scores"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "score-check",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.hasHighScores }}",
+              "rightValue": 75
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3a88bc73-bd50-4025-bd47-b5a0d89bc8a1",
+      "name": "Has High Scores?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -3616,
+        544
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convert aggregated highScoreJobs back to individual items\nconst highScoreJobs = $input.first().json.highScoreJobs;\n\nreturn highScoreJobs.map(job => ({ json: job }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3424,
+        464
+      ],
+      "id": "df7b52f5-a995-450b-b7d2-73be4bd59a3a",
+      "name": "Split Out High Score Jobs"
+    },
+    {
+      "parameters": {
+        "jsCode": "let searchUrl = \"\";\nlet searchLabel = \"\";\nlet totalJobs = 0;\ntry {\n  const loopItem = $(\"Loop Over URLs\").first().json;\n  searchUrl = loopItem.URL || \"\";\n  searchLabel = loopItem.Label || \"\";\n} catch (e) {\n  console.log(\"Could not get loop item:\", e.message);\n}\n\ntry {\n  totalJobs = $input.first().json.totalJobs || 0;\n} catch (e) {\n  console.log(\"Could not get totalJobs:\", e.message);\n}\n\nconst searchLinkHtml = searchUrl ? `<p style=\"margin: 5px 0;\">\ud83d\udd0e <a href=\"${searchUrl}\" style=\"color:#0a66c2;\">${searchLabel || \"LinkedIn search\"}</a></p>` : \"\";\n\nreturn [{\n  json: {\n    subject: \"\u26d4\ufe0f LinkedIn Scraper Ran - No High Matches Found\",\n    html: `\n      <div style=\"padding: 20px; font-family: Arial; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9;\">\n        <h3 style=\"color: #666;\">\u2705 Workflow Executed Successfully</h3>\n        ${searchLinkHtml}\n        <p>The LinkedIn scraper completed but found no jobs scoring 75% or above for this search.</p>\n        <p><strong>Total jobs processed:</strong> ${totalJobs}</p>\n        <p><strong>Highest scores were below 75</strong></p>\n        <p style=\"font-size: 13px; color: #666; margin-top: 20px;\">All results have been saved to your Google Sheet for review.</p>\n      </div>\n    `\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3408,
+        960
+      ],
+      "id": "aa2a1ae7-0123-4fe5-a794-c4366f4be999",
+      "name": "Format No Match Email"
+    },
+    {
+      "parameters": {
+        "sendTo": "[YOUR_EMAIL]",
+        "subject": "={{ $json.subject }}",
+        "message": "= {{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -3184,
+        960
+      ],
+      "id": "e735fd95-bedf-4871-8a57-0b8398f8610b",
+      "name": "Send No Match Email",
+      "webhookId": "[YOUR_WEBHOOK_ID]",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "[YOUR_CREDENTIAL_ID]",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "[YOUR_EMAIL]",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -7376,
+        0
+      ],
+      "id": "3b09d37e-e24a-4c3c-8a40-c2859e54ad43",
+      "name": "Send Completed Message",
+      "webhookId": "[YOUR_WEBHOOK_ID]",
+      "executeOnce": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "[YOUR_CREDENTIAL_ID]",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get URL count\nconst urlCount = $('Filter Active URLs').all().length || 0;\n\n// Get current date/time in Pacific\nconst now = new Date();\nconst dateStr = now.toLocaleDateString('en-US', { \n  timeZone: 'America/Los_Angeles',\n  weekday: 'long',\n  month: 'long', \n  day: 'numeric',\n  year: 'numeric'\n});\nconst timeStr = now.toLocaleTimeString('en-US', { \n  timeZone: 'America/Los_Angeles',\n  hour: 'numeric',\n  minute: '2-digit'\n});\n\nreturn [{\n  json: {\n    subject: `\u2705 LinkedIn Scraper Complete - ${dateStr}`,\n    html: `\n      <div style=\"padding: 20px; font-family: Arial; border: 1px solid #ddd; border-radius: 8px; background: #f0fff4;\">\n        <h3 style=\"color: #22863a; margin-top: 0;\">\u2705 All Job Searches Complete</h3>\n        <p><strong>Finished at:</strong> ${timeStr}</p>\n        <p><strong>URLs processed:</strong> ${urlCount}</p>\n        <hr style=\"border: none; border-top: 1px solid #ddd; margin: 15px 0;\">\n        <p style=\"margin-bottom: 5px;\"><strong>Results saved to:</strong></p>\n        <p style=\"margin-top: 5px;\">\n          <a href=\"https://docs.google.com/spreadsheets/d/[YOUR_SHEET_ID]/edit#gid=1176573272\" \n             style=\"color: #0a66c2;\">\ud83d\udcca Automated Job Hunt Sheet</a>\n        </p>\n        <p style=\"font-size: 13px; color: #666; margin-top: 20px;\">\n          Check individual emails for high-match alerts, no-match notifications, or duplicate-only results.\n        </p>\n      </div>\n    `\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7792,
+        272
+      ],
+      "id": "1ba6e785-4e36-458b-9e1c-ee1b31ad3d9e",
+      "name": "Format Completed Email"
+    },
+    {
+      "parameters": {
+        "jsCode": "const searchUrl = $input.first().json.searchUrl || \"\";\nconst searchLabel = $input.first().json.searchLabel || \"\";\nconst jobCount = $input.first().json.totalJobsProcessed || 0;\n\nconst searchLinkHtml = searchUrl\n  ? `<p style=\"margin: 5px 0;\">\ud83d\udd0e <a href=\"${searchUrl}\" style=\"color:#0a66c2;\">${searchLabel || \"LinkedIn search\"}</a></p>`\n  : \"\";\n\nreturn [{\n  json: {\n    subject: \"\ud83d\udd04 LinkedIn Scraper - Only Duplicates Found\",\n    html: `\n      <div style=\"padding: 20px; font-family: Arial; border: 1px solid #ddd; border-radius: 8px; background: #fff8e6;\">\n        <h3 style=\"color: #856404;\">\ud83d\udd04 No New Jobs Found</h3>\n        ${searchLinkHtml}\n        <p>The LinkedIn scraper completed but all jobs from this search were already in the database.</p>\n        <p><strong>Jobs processed:</strong> ${jobCount}</p>\n        <p style=\"font-size: 13px; color: #666; margin-top: 20px;\">This is normal - it means no new postings since the last scan.</p>\n      </div>\n    `\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5536,
+        832
+      ],
+      "id": "508bf2f7-7344-43d7-8d33-ec574293cab6",
+      "name": "Format Duplicates Email"
+    },
+    {
+      "parameters": {
+        "sendTo": "[YOUR_EMAIL]",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -4880,
+        832
+      ],
+      "id": "d415e3a9-993e-4aca-a4fa-2893aa1f008a",
+      "name": "Send Duplicates Email",
+      "webhookId": "[YOUR_WEBHOOK_ID]",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "[YOUR_CREDENTIAL_ID]",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const resumeText = $('Schedule Extract Resume').first().json.text || '';\nconst searchLabel = $(\"Loop Over URLs\").first().json.Label || '';\nconst scrapedDate = new Date().toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles' });\n\nreturn $input.all().map(item => ({\n  json: {\n    ...item.json,\n    resumeText,\n    searchLabel,\n    scrapedDate\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5328,
+        560
+      ],
+      "id": "9ad2cb7e-1b47-4244-836f-647264f6e228",
+      "name": "Enrich Items"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "Q8HXw2oU8q3z2Yhs",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/Q8HXw2oU8q3z2Yhs",
+          "cachedResultName": "2026-02-20-AI Score LinkedIn Jobs (Batched)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -4944,
+        544
+      ],
+      "id": "54979c75-7395-479a-8ab7-2f940de55b8d",
+      "name": "Execute AI Score Jobs (Batched) Sub-Flow"
+    }
+  ],
+  "pinData": {
+    "Schedule Trigger - Daily 6 AM": [
+      {
+        "json": {
+          "timestamp": "2026-02-20T06:00:00.004-08:00",
+          "Readable date": "February 20th 2026, 6:00:00 am",
+          "Readable time": "6:00:00 am",
+          "Day of week": "Friday",
+          "Year": "2026",
+          "Month": "February",
+          "Day of month": "20",
+          "Hour": "06",
+          "Minute": "00",
+          "Second": "00",
+          "Timezone": "America/Los_Angeles (UTC-08:00)"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Get LinkedIn Jobs": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Extract Incoming IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Duplicates": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger - Daily 6 AM": {
+      "main": [
+        [
+          {
+            "node": "Read Job URLs from Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Job URLs from Sheet": {
+      "main": [
+        [
+          {
+            "node": "Filter Active URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Active URLs": {
+      "main": [
+        [
+          {
+            "node": "Loop Over URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Download Resume": {
+      "main": [
+        [
+          {
+            "node": "Schedule Extract Resume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Extract Resume": {
+      "main": [
+        [
+          {
+            "node": "Get LinkedIn Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over URLs": {
+      "main": [
+        [
+          {
+            "node": "Format Completed Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Delay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add jobs to Google Sheet": {
+      "main": [
+        [
+          {
+            "node": "Enrich Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Email HTML": {
+      "main": [
+        [
+          {
+            "node": "Sort by Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sort by Score": {
+      "main": [
+        [
+          {
+            "node": "Combine High-Score Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine High-Score Jobs": {
+      "main": [
+        [
+          {
+            "node": "Send High-Score Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send High-Score Alert": {
+      "main": [
+        [
+          {
+            "node": "Loop Over URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Delay": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Schedule Download Resume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Existing Job IDs": {
+      "main": [
+        [
+          {
+            "node": "Filter Duplicates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Incoming IDs": {
+      "main": [
+        [
+          {
+            "node": "Get Existing Job IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Insert row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Add jobs to Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Duplicates Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate & Check Scores": {
+      "main": [
+        [
+          {
+            "node": "Has High Scores?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has High Scores?": {
+      "main": [
+        [
+          {
+            "node": "Split Out High Score Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format No Match Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out High Score Jobs": {
+      "main": [
+        [
+          {
+            "node": "Format Email HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format No Match Email": {
+      "main": [
+        [
+          {
+            "node": "Send No Match Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send No Match Email": {
+      "main": [
+        [
+          {
+            "node": "Loop Over URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Completed Email": {
+      "main": [
+        [
+          {
+            "node": "Send Completed Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Duplicates Email": {
+      "main": [
+        [
+          {
+            "node": "Send Duplicates Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Duplicates Email": {
+      "main": [
+        [
+          {
+            "node": "Loop Over URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich Items": {
+      "main": [
+        [
+          {
+            "node": "Execute AI Score Jobs (Batched) Sub-Flow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute AI Score Jobs (Batched) Sub-Flow": {
+      "main": [
+        [
+          {
+            "node": "Aggregate & Check Scores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "timezone": "America/Los_Angeles",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "[YOUR_ERROR_WORKFLOW_ID]",
+    "timeSavedPerExecution": 35
+  },
+  "versionId": "c61ec24a-c080-4eb6-85fb-1a7cb9009714",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "[YOUR_INSTANCE_ID]"
+  },
+  "id": "JXafdrhQbC8Jj6JxkhUCk",
+  "tags": []
+}

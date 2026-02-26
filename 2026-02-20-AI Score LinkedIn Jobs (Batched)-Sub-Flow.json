@@ -1,0 +1,615 @@
+{
+  "name": "2026-02-20-AI Score LinkedIn Jobs (Batched)",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "3710daf0-22d9-45b9-9441-117ad031f4b7",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        -448,
+        144
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "batchSize": 40,
+        "options": {
+          "reset": false
+        }
+      },
+      "id": "0aa0a7db-bc27-43a9-b1d2-e54f9c2ff357",
+      "name": "Split in Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "position": [
+        -224,
+        144
+      ],
+      "typeVersion": 3
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "job-id",
+              "name": "jobId",
+              "type": "string",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "id": "job-title",
+              "name": "jobTitle",
+              "type": "string",
+              "value": "={{ $json['Job Title'] }}"
+            },
+            {
+              "id": "company",
+              "name": "company",
+              "type": "string",
+              "value": "={{ $json.Company }}"
+            },
+            {
+              "id": "apply-url",
+              "name": "applyUrl",
+              "type": "string",
+              "value": "={{ $json['Apply URL'] }}"
+            },
+            {
+              "id": "work-type",
+              "name": "workType",
+              "type": "string",
+              "value": "={{ $json['Is It In-Person, Remote or Hybrd'] }}"
+            },
+            {
+              "id": "salary-min",
+              "name": "salaryMin",
+              "type": "string",
+              "value": "={{ $json[\"Minimum Salary\"] }}"
+            },
+            {
+              "id": "salary-max",
+              "name": "salaryMax",
+              "type": "string",
+              "value": "={{ $json['Maximum Salary'] }}"
+            },
+            {
+              "id": "description",
+              "name": "description",
+              "type": "string",
+              "value": "={{ $json.cleanDescription || $json.descriptionText || $json.description || 'No description available' }}"
+            },
+            {
+              "id": "posted-at",
+              "name": "postedAt",
+              "type": "string",
+              "value": "={{ $json['Date Posted'] }}"
+            },
+            {
+              "id": "resume-text",
+              "name": "resumeText",
+              "type": "string",
+              "value": "={{ $json.resumeText }}"
+            },
+            {
+              "id": "location-field",
+              "name": "location",
+              "value": "={{ $json.Location }}",
+              "type": "string"
+            },
+            {
+              "id": "job-url-field",
+              "name": "jobUrl",
+              "value": "={{ $json[\"Job URL\"] }}",
+              "type": "string"
+            },
+            {
+              "id": "company-desc",
+              "name": "Company Description",
+              "value": "={{ $json[\"Company Description\"] }}",
+              "type": "string"
+            },
+            {
+              "id": "desc-text",
+              "name": "description",
+              "value": "={{ $json['Description Text'] }}",
+              "type": "string"
+            },
+            {
+              "id": "search-label",
+              "name": "searchLabel",
+              "value": "={{ $json.searchLabel }}",
+              "type": "string"
+            },
+            {
+              "id": "scraped-date",
+              "name": "scrapedDate",
+              "value": "={{ $json.scrapedDate }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "43788089-acba-4555-b478-6d4ebe94609d",
+      "name": "Merge Job + Resume Data",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        0,
+        240
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a job-matching assistant that scores how well a candidate's resume matches a job posting.\n\nJOB POSTING:\nTitle: {{ $json.jobTitle }}\nCompany: {{ $json.company }}\nLocation: {{ $json.location }}\nDescription: {{ $json.description }}\nCompany Description: {{ $json[\"Company Description\"] }}\n\nCANDIDATE RESUME:\n{{ $json.resumeText }}\n\nTASKS:\n1. Analyze how well the resume matches this specific job\n2. Provide a match score from 0-100\n3. Provide a quick 2-3 sentence summary of fit\n\nSCORING CRITERIA (total 100 points):\n- Skills/Tools overlap: 40 points\n- Relevant experience & seniority: 25 points  \n- Responsibilities alignment: 15 points\n- Education/Certifications fit: 5 points\n- Domain/Industry fit: 5 points\n- Location/logistics fit: 10 points\n\nRESPOND WITH ONLY THIS JSON FORMAT (no other text):\n```json\n{\n  \"job_title\": \"{{ $json.jobTitle }}\",\n  \"company\": \"{{ $json.company }}\",\n  \"location\": \"{{ $json.location }}\",\n  \"job_description\": \"{{ $json.description }}\",\n  \"company_description\": \"{{ $json[\"Company Description\"] }}\",\n  \"match_score\": <number 0-100>,\n  \"score_breakdown\": {\n    \"skills_overlap\": <number 0-40>,\n    \"experience_match\": <number 0-25>,\n    \"responsibilities_alignment\": <number 0-15>,\n    \"education_fit\": <number 0-5>,\n    \"domain_fit\": <number 0-5>,\n    \"logistics_fit\": <number 0-10>\n  },\n  \"key_strengths\": [\"<strength 1>\", \"<strength 2>\", \"<strength 3>\"],\n  \"key_gaps\": [\"<gap 1>\", \"<gap 2>\"],\n  \"quick_summary\": \"<2-3 sentence summary of fit>\"\n}",
+        "options": {}
+      },
+      "id": "a191327d-614e-4a63-9df7-521f35d4ac74",
+      "name": "AI Score Resume",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        192,
+        240
+      ],
+      "typeVersion": 2.2,
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-2.5-flash-lite",
+        "options": {}
+      },
+      "id": "94fc467b-32bb-42d0-aaf0-b8d645232e21",
+      "name": "Gemini Flash 2.5 Lite",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "position": [
+        192,
+        464
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "openRouterApi": {
+          "id": "[YOUR_CREDENTIAL_ID]",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Parse the AI response and extract JSON\nconst aiOutput = $input.item.json.output || $input.item.json.text || '';\nlet parsed = {};\ntry {\n  let jsonStr = aiOutput\n    .replace(/```json\\s*/gi, '')\n    .replace(/```\\s*/gi, '')\n    .trim();\n  \n  const startIdx = jsonStr.indexOf('{');\n  const endIdx = jsonStr.lastIndexOf('}');\n  \n  if (startIdx !== -1 && endIdx !== -1) {\n    jsonStr = jsonStr.slice(startIdx, endIdx + 1);\n    parsed = JSON.parse(jsonStr);\n  }\n} catch (e) {\n  parsed = {\n    match_score: 0,\n    score_breakdown: {},\n    key_strengths: [],\n    key_gaps: [],\n    quick_summary: 'Unable to parse AI response'\n  };\n}\nconst jobData = $('Merge Job + Resume Data').item.json;\nfunction parseToNumber(val) {\n  if (!val || val === '') return null;\n  const n = parseFloat(val);\n  return isNaN(n) ? null : n;\n}\nfunction formatDollars(num) {\n  if (num === null || num === undefined) return '';\n  return '$' + num.toLocaleString('en-US', { maximumFractionDigits: 0 });\n}\nfunction formatSalaryRange(min, max) {\n  const minStr = min ? formatDollars(min) : null;\n  const maxStr = max ? formatDollars(max) : null;\n  \n  if (minStr && maxStr) return `${minStr} - ${maxStr}`;\n  if (minStr) return `${minStr}+`;\n  if (maxStr) return `Up to ${maxStr}`;\n  return 'Not specified';\n}\nfunction formatScoreBreakdown(breakdown) {\n  if (!breakdown || typeof breakdown !== 'object') return 'N/A';\n  \n  const labels = {\n    skills_overlap: 'Skills',\n    experience_match: 'Experience',\n    responsibilities_alignment: 'Responsibilities',\n    education_fit: 'Education',\n    domain_fit: 'Domain',\n    logistics_fit: 'Logistics'\n  };\n  \n  const maxPoints = {\n    skills_overlap: 40,\n    experience_match: 25,\n    responsibilities_alignment: 15,\n    education_fit: 5,\n    domain_fit: 5,\n    logistics_fit: 10\n  };\n  \n  return Object.entries(breakdown)\n    .map(([key, value]) => `${labels[key] || key}: ${value}/${maxPoints[key] || '?'}`)\n    .join(' | ');\n}\nconst salaryMin = parseToNumber(jobData.salaryMin);\nconst salaryMax = parseToNumber(jobData.salaryMax);\nreturn {\n  json: {\n    jobId: jobData.jobId,\n    jobTitle: jobData.jobTitle,\n    company: jobData.company,\n    location: jobData.location,\n    jobUrl: jobData.jobUrl,\n    applyUrl: jobData.applyUrl,\n    workType: jobData.workType,\n    salaryMin: salaryMin,\n    salaryMax: salaryMax,\n    salaryFormatted: formatSalaryRange(salaryMin, salaryMax),\n    postedAt: jobData.postedAt,\n    companyDescription: parsed.company_description || jobData[\"Company Description\"] || '',\n    matchScore: parsed.match_score || 0,\n    scoreBreakdown: formatScoreBreakdown(parsed.score_breakdown),\n    keyStrengths: Array.isArray(parsed.key_strengths) ? parsed.key_strengths.join('; ') : '',\n    keyGaps: Array.isArray(parsed.key_gaps) ? parsed.key_gaps.join('; ') : '',\n    quickSummary: parsed.quick_summary || '',\n    jobDescription: jobData.description || '',\n    searchLabel: jobData.searchLabel || '',\n    scrapedDate: jobData.scrapedDate || ''\n  }\n};"
+      },
+      "id": "51f2f38e-fa3c-4387-b8f2-920adb493c7a",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        480,
+        240
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "[YOUR_SHEET_ID]",
+          "mode": "list",
+          "cachedResultName": "Automated Job Hunt",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/[YOUR_SHEET_ID]/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1176573272,
+          "mode": "list",
+          "cachedResultName": "Sheet2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/[YOUR_SHEET_ID]/edit#gid=1176573272"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "jobId": "={{ $json.jobId }}",
+            "jobTitle": "={{ $json.jobTitle }}",
+            "company": "={{ $json.company }}",
+            "location": "={{ $json.location }}",
+            "jobUrl": "={{ $json.jobUrl }}",
+            "applyUrl": "={{ $json.applyUrl }}",
+            "workType": "={{ $json.workType }}",
+            "salaryMin": "={{ $json.salaryMin }}",
+            "salaryMax": "={{ $json.salaryMax }}",
+            "salaryFormatted": "={{ $json.salaryFormatted }}",
+            "postedAt": "={{ $json.postedAt }}",
+            "matchScore": "={{ $json.matchScore }}",
+            "scoreBreakdown": "={{ $json.scoreBreakdown }}",
+            "keyStrengths": "={{ $json.keyStrengths }}",
+            "keyGaps": "={{ $json.keyGaps }}",
+            "quickSummary": "={{ $json.quickSummary }}",
+            "companyDescription": "={{ $json.companyDescription }}",
+            "jobDescription": "={{ $json.jobDescription }}",
+            "searchLabel": "={{ $json.searchLabel }}",
+            "scrapedDate": "={{ $json.scrapedDate }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "jobId",
+              "displayName": "jobId",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "jobTitle",
+              "displayName": "jobTitle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "jobUrl",
+              "displayName": "jobUrl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "applyUrl",
+              "displayName": "applyUrl",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "workType",
+              "displayName": "workType",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "salaryMin",
+              "displayName": "salaryMin",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "salaryMax",
+              "displayName": "salaryMax",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "salaryFormatted",
+              "displayName": "salaryFormatted",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "postedAt",
+              "displayName": "postedAt",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "matchScore",
+              "displayName": "matchScore",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scoreBreakdown",
+              "displayName": "scoreBreakdown",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "keyStrengths",
+              "displayName": "keyStrengths",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "keyGaps",
+              "displayName": "keyGaps",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "quickSummary",
+              "displayName": "quickSummary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "companyDescription",
+              "displayName": "companyDescription",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "jobDescription",
+              "displayName": "jobDescription",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "searchLabel",
+              "displayName": "searchLabel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scrapedDate",
+              "displayName": "scrapedDate",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "useAppend": true
+        }
+      },
+      "id": "deca7600-38d5-4388-9e85-3e14ddfba736",
+      "name": "Add to Google Sheet (Post Parse)",
+      "type": "n8n-nodes-base.googleSheets",
+      "position": [
+        672,
+        240
+      ],
+      "typeVersion": 4.7,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "[YOUR_CREDENTIAL_ID]",
+          "name": "Google Sheets account1"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nif (!staticData.scoredJobs) staticData.scoredJobs = [];\nconst items = $input.all().map(item => item.json);\nstaticData.scoredJobs = staticData.scoredJobs.concat(items);\nreturn $input.all();"
+      },
+      "id": "f583e68b-1c06-4efd-99a4-a6000be4c008",
+      "name": "Store Results",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        880,
+        240
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "id": "8574c641-fe5e-4548-b386-b4be0676fb69",
+      "name": "Wait For Batch",
+      "type": "n8n-nodes-base.wait",
+      "position": [
+        1104,
+        240
+      ],
+      "typeVersion": 1.1,
+      "webhookId": "[YOUR_WEBHOOK_ID]"
+    },
+    {
+      "parameters": {
+        "jsCode": "const staticData = $getWorkflowStaticData('global');\nconst results = (staticData.scoredJobs || []).map(job => ({ json: job }));\nstaticData.scoredJobs = [];\nreturn results;"
+      },
+      "id": "abd4e3ce-dfac-41b8-842c-bdede578759b",
+      "name": "Return Results",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        0,
+        0
+      ],
+      "typeVersion": 2
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Split in Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split in Batches": {
+      "main": [
+        [
+          {
+            "node": "Return Results",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Job + Resume Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Job + Resume Data": {
+      "main": [
+        [
+          {
+            "node": "AI Score Resume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Score Resume": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Flash 2.5 Lite": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Score Resume",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Add to Google Sheet (Post Parse)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add to Google Sheet (Post Parse)": {
+      "main": [
+        [
+          {
+            "node": "Store Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Results": {
+      "main": [
+        [
+          {
+            "node": "Wait For Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait For Batch": {
+      "main": [
+        [
+          {
+            "node": "Split in Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Results": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "[YOUR_ERROR_WORKFLOW_ID]",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "46a57bdd-6250-4f24-9261-7ed63c79e589",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "[YOUR_INSTANCE_ID]"
+  },
+  "id": "Q8HXw2oU8q3z2Yhs",
+  "tags": []
+}
